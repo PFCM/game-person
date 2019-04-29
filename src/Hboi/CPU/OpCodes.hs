@@ -22,7 +22,10 @@ import           Data.Word                                ( Word8
 
 
 import           Debug.Trace
--- runs an opcode, updating the state in some way. In general we try and ensure
+
+-- * the main dispatch functions
+
+-- |runs an opcode, updating the state in some way. In general we try and ensure
 -- that the functions called from here need a minimum of constraints. It will be
 -- common for a lot of takes n $ .... for example, because then the function
 -- being called to do the operation does not require the MonadClock constraint
@@ -282,7 +285,9 @@ op 0x33 = inc16 getSP setSP
 -- anything else is invalid
 op x    = throwError $ "Invalid opcode: " ++ show x
 
+-- * ops dispatched to
 
+-- ** misc/unfinished ops
 rotateCarryLeft
   :: (MonadReadReg8 m, MonadWriteReg8 m, MonadFlags m, MonadClock m)
   => m Word8
@@ -340,6 +345,9 @@ inc16
   -> m ()
 inc16 g = takes 2 . regOp16 g (+ 1)
 
+-- ** 8 bit arithmetic/bitwise ops
+
+-- |add two registers, may set carry, half carry, zero, clears add/sub
 add8 :: (MonadFlags m) => m Word8 -> m Word8 -> (Word8 -> m ()) -> m ()
 add8 x y s = do
   x' <- x
@@ -351,6 +359,7 @@ add8 x y s = do
   setFlag Zero (r == 0)
   s r
 
+-- |add two registers with carry, same as 'add8' but maybe with an extra 1
 adc8 :: (MonadFlags m) => m Word8 -> m Word8 -> (Word8 -> m ()) -> m ()
 adc8 x y s = do
   x' <- x
@@ -363,6 +372,8 @@ adc8 x y s = do
   setFlag Zero (r == 0)
   s r
 
+-- |subtract second arg from the first, may set carry and half carry if no
+-- borrow occurred, could set 0 and defnitely sets add/sub
 sub8 :: (MonadFlags m) => m Word8 -> m Word8 -> (Word8 -> m ()) -> m ()
 sub8 x y s = do
   x' <- x
@@ -375,6 +386,7 @@ sub8 x y s = do
   setFlag Zero      (r == 0)
   s r
 
+-- |subtract with carry, as per 'sub8' but sometimes one less
 sbc8
   :: (MonadReadReg8 m, MonadWriteReg8 m, MonadFlags m)
   => m Word8
@@ -383,6 +395,7 @@ sbc8
   -> m ()
 sbc8 = undefined
 
+-- |bitwise and, clears carry and add/sub, sets half carry, could set zero
 and8 :: (MonadFlags m) => m Word8 -> m Word8 -> (Word8 -> m ()) -> m ()
 and8 a b s =
   (.&.)
@@ -397,6 +410,7 @@ and8 a b s =
         )
     >>= s
 
+-- |bitwise or, clears carry, add/sub and half carry but could set zero
 or8 :: (MonadFlags m) => m Word8 -> m Word8 -> (Word8 -> m ()) -> m ()
 or8 a b s =
   (.|.)
@@ -411,6 +425,7 @@ or8 a b s =
         )
     >>= s
 
+-- |bitwise xor, might set zero and clears the rest
 xor8 :: (MonadFlags m) => m Word8 -> m Word8 -> (Word8 -> m ()) -> m ()
 xor8 a b s =
   xor
@@ -425,6 +440,8 @@ xor8 a b s =
         )
     >>= s
 
+-- |increment a register. Never sets carry, may set half carry or zero and
+-- clears add/sub
 inc8 :: (MonadFlags m) => m Word8 -> (Word8 -> m ()) -> m ()
 inc8 a s = do
   a' <- a
@@ -434,10 +451,12 @@ inc8 a s = do
   setFlag HalfCarry (testBit a' 3 && not (testBit r 3))
   s r
 
--- gets the value at (PC) and increments PC, for fetching immediate values etc.
+-- | gets the value at (PC) and increments PC, for fetching immediate values etc.
 -- TODO maybe move this into MonadPC itself
 next :: (MonadPC m, MonadMem m) => m Word8
 next = (getPC >>= read8) <* incPC
 
+-- | gets a 16 bit starting at PC and increments PC twice.
+-- TODO check the order of the bytes in the 16 is as expected
 next16 :: (MonadPC m, MonadMem m) => m Word16
 next16 = (getPC >>= read16) <* incPC <* incPC
