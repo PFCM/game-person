@@ -5,4 +5,4 @@ import           Test.Hspec
 import           CPUTest                                  ( cpuUnits )
 
 main :: IO ()
-main = hspec $ cpuUnits
+main = hspec cpuUnits
