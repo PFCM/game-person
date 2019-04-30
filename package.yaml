@@ -48,3 +48,19 @@ tests:
     dependencies:
     - hboi
     - hspec
+  opcode-cover:
+    main:            Spec.hs
+    source-dirs:     test/opcodes
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+    dependencies:
+      - hboi
+      - hspec
+      - aeson
+      - containers
+      - bytestring
+      - text
+      - vector
+      - mtl
