@@ -1,3 +1,4 @@
 .stack-work/
 hboi.cabal
 *~
+test/data/
