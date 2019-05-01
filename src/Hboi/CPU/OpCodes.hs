@@ -194,7 +194,7 @@ op 0x82 = takes 1 $ add8 getA getD setA
 op 0x83 = takes 1 $ add8 getA getE setA
 op 0x84 = takes 1 $ add8 getA getH setA
 op 0x85 = takes 1 $ add8 getA getL setA
--- op 0x86 takes 2, add (HL) onto A
+op 0x86 = takes 2 $ add8 getA (getHL >>= read8) setA -- add (HL) onto A
 -- op 0xC6 = A += # ?? what is #???, takes 2 though
 -- add + carry
 op 0x8F = takes 1 $ adc8 getA getA setA
@@ -204,7 +204,7 @@ op 0x8A = takes 1 $ adc8 getA getD setA
 op 0x8B = takes 1 $ adc8 getA getE setA
 op 0x8C = takes 1 $ adc8 getA getH setA
 op 0x8D = takes 1 $ adc8 getA getL setA
--- op 0x8E takes 2, add (HL) into A with carry
+op 0x8E = takes 2 $ adc8 getA (getHL >>= read8) setA-- add (HL) into A with carry
 -- op 0xCE takes 2, add # onto A with carry...
 -- subs (subtract _from_ A)
 op 0x97 = takes 1 $ sub8 getA getA setA
@@ -214,7 +214,7 @@ op 0x92 = takes 1 $ sub8 getA getD setA
 op 0x93 = takes 1 $ sub8 getA getE setA
 op 0x94 = takes 1 $ sub8 getA getH setA
 op 0x95 = takes 1 $ sub8 getA getL setA
--- op 0x96 takes 2, subtracts (HL) from A
+op 0x96 = takes 2 $ sub8 getA (getHL >>= read8) setA -- subtracts (HL) from A
 -- op 0xD6 takes 2, subtracts # from A
 -- sbc, subtract with carry
 op 0x9F = takes 1 $ sbc8 getA getA setA
@@ -224,7 +224,7 @@ op 0x9A = takes 1 $ sbc8 getA getA setA
 op 0x9B = takes 1 $ sbc8 getA getA setA
 op 0x9C = takes 1 $ sbc8 getA getA setA
 op 0x9D = takes 1 $ sbc8 getA getA setA
--- op 0x9E takes 2, subtracts (HL) from A with carry
+op 0x9E = takes 2 $ sbc8 getA (getHL >>= read8) setA -- subtracts (HL) from A with carry
 -- op ?? takes ? subtracts # from A ???
 -- AND with A
 op 0xA7 = takes 1 $ and8 getA getA setA
@@ -234,7 +234,7 @@ op 0xA2 = takes 1 $ and8 getA getD setA
 op 0xA3 = takes 1 $ and8 getA getE setA
 op 0xA4 = takes 1 $ and8 getA getH setA
 op 0xA5 = takes 1 $ and8 getA getL setA
-op 0xA6 = takes 2 (and8 getA (getHL >>= read8) setA)
+op 0xA6 = takes 2 $ and8 getA (getHL >>= read8) setA
 -- op 0xE6 ands A with #, takes 2
 -- OR with A
 op 0xB7 = takes 1 $ or8 getA getA setA
@@ -244,7 +244,7 @@ op 0xB2 = takes 1 $ or8 getA getD setA
 op 0xB3 = takes 1 $ or8 getA getE setA
 op 0xB4 = takes 1 $ or8 getA getH setA
 op 0xB5 = takes 1 $ or8 getA getL setA
-op 0xB6 = takes 2 (or8 getA (getHL >>= read8) setA)
+op 0xB6 = takes 2 $ or8 getA (getHL >>= read8) setA
 -- op 0xF6 ors A with #, takes 2
 -- XOR with A
 op 0xAF = takes 1 $ xor8 getA getA setA
@@ -254,7 +254,7 @@ op 0xAA = takes 1 $ xor8 getA getD setA
 op 0xAB = takes 1 $ xor8 getA getE setA
 op 0xAC = takes 1 $ xor8 getA getH setA
 op 0xAD = takes 1 $ xor8 getA getL setA
-op 0xAE = takes 2 (xor8 getA (getHL >>= read8) setA)
+op 0xAE = takes 2 $ xor8 getA (getHL >>= read8) setA
 -- op 0xEE xors A with *, I think they mean #, takes 2
 -- CP with A, like subtraction but no result, just set the flags
 op 0xBF = takes 1 $ sub8 getA getA (\_ -> return ())
@@ -264,7 +264,7 @@ op 0xBA = takes 1 $ sub8 getA getD (\_ -> return ())
 op 0xBB = takes 1 $ sub8 getA getE (\_ -> return ())
 op 0xBC = takes 1 $ sub8 getA getH (\_ -> return ())
 op 0xBD = takes 1 $ sub8 getA getL (\_ -> return ())
-op 0xBE = takes 2 (sub8 getA (getHL >>= read8) (\_ -> return ()))
+op 0xBE = takes 2 $ sub8 getA (getHL >>= read8) (\_ -> return ())
 -- op 0xFE does this with #, takes 2 INC, increment registers, might set the
 -- half-carry flag but apparently not the carry flag
 op 0x3C = takes 1 $ inc8 getA setA
@@ -281,9 +281,10 @@ op 0x13 = inc16 getDE setDE
 op 0x23 = inc16 getHL setHL
 op 0x33 = inc16 getSP setSP
 
-
 -- op 0x04 = incB
 -- op 0x05 = decB
+
+
 -- anything else is invalid
 op x    = throwError $ "Invalid opcode: " ++ show x
 
