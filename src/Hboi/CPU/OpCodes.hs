@@ -19,6 +19,7 @@ import           Data.Bits
 import           Data.Word                                ( Word8
                                                           , Word16
                                                           )
+import           Data.Int                                 ( Int16 )
 
 
 import           Debug.Trace
@@ -69,21 +70,22 @@ op 0xE9 = takes 1 $ getHL >>= setPC  -- jump to contents of HL
 -- op 0x3e -- takes 2, load # into A (what is #??????)
 op 0x0A = takes 2 (getBC >>= read8 >>= setA)
 op 0x1A = takes 2 (getDE >>= read8 >>= setA)
--- op 0xFA -- takes 4, load (nn) into A, where nn is 2 immediates ls byte first
+op 0xFA = takes 4 (next16 >>= read8 >>= setA) -- takes 4, load (nn) into A, where nn is 2 immediates ls byte first
 op 0x02 = takes 2 (join $ write8 <$> getBC <*> getA)
 op 0x12 = takes 2 (join $ write8 <$> getDE <*> getA)
 op 0x77 = takes 2 (join $ write8 <$> getHL <*> getA)
--- op 0xEA -- takes 4, load A into (nn), with nn as above
--- op 0xE0 -- takes 3, load A into $FF00 + n, for one byte immediate n
--- op 0xF0 -- takes 3, load $FF00 + n into A, as above but backwards
--- A <-> (C)  is the offset signed?
--- op 0xF2 -- takes 2, load $FF00 + C into A
--- op 0xE2 -- takes 2, load A into $FF00 + C
+op 0xEA = takes 4 (join $ write8 <$> next16 <*> getA) -- load A into (nn), with nn as above
+-- these are loads for IO
+op 0xE0 = takes 3 (join $ write8 <$> (add16To8 0xFF00 <$> next) <*> getA) -- load A into $FF00 + n, for one byte immediate n
+op 0xF0 = takes 3 (add16To8 0xFF00 <$> next >>= read8 >>= setA)-- load $FF00 + n into A, as above but backwards
+-- A <-> (C), again IO but offset in a reg
+op 0xE2 = takes 2 (join $ write8 <$> (add16To8 0xFF00 <$> getC) <*> getA) -- takes 2, load A into $FF00 + C
+op 0xF2 = takes 2 (add16To8 0xFF00 <$> getC >>= read8 >>= setA) -- load $FF00 + C into A
 -- Fancy load and muck around with HL, aka stack 2.0
--- op 0x3A -- takes 2, load (HL) into A, decrement HL
--- op 0x32 -- takes 2, load A into (HL), decrement HL
--- op 0x2A -- takes 2, load (HL) into A, increment HL
--- op 0x22 -- takes 2, load A into (HL), increment HL
+op 0x3A = takes 2 (getHL >>= read8 >>= setA) >> dec16 getHL setHL -- takes 2, load (HL) into A, decrement HL
+op 0x32 = takes 2 (join $ write8 <$> getHL <*> getA) >> dec16 getHL setHL -- load A into (HL), decrement HL
+op 0x2A = takes 2 (getHL >>= read8 >>= setA) >> inc16 getHL setHL -- takes 2, load (HL) into A, increment HL
+op 0x22 = takes 2 (join $ write8 <$> getHL <*> getA) >> inc16 getHL setHL -- load A into (HL), increment HL
 -- 8-bit load immediate into register
 op 0x06 = takes 2 (next >>= setB) -- takes 2, load immediate into B
 op 0x0E = takes 2 (next >>= setC) -- takes 2, load immediate into C
@@ -169,8 +171,8 @@ op 0x21 = takes 3 (next16 >>= setHL)
 op 0x31 = takes 3 (next16 >>= setSP)
 -- Misc. 16 bit loads
 op 0xF9 = takes 2 (getHL >>= setSP)
--- op 0xF8 -- takes 3, load SP + n into HL (I think)
--- op 0x08 -- takes 5, load SP into (nn), two byte nn etc etc
+op 0xF8 = takes 3 (add16to8Signed <$> getSP <*> next) >>= setHL -- load SP + n into HL, n IS SIGNED
+op 0x08 = takes 5 (join $ write16 <$> getSP <*> next16) -- takes 5, load SP into (nn), two byte nn etc etc
 ---------STANDARD STACK OPS--------
 -- PUSHH
 op 0xF5 = takes 4 $ getAF >>= spush -- I suspect this actually happens in the opposite order
@@ -285,6 +287,13 @@ op 0x33 = inc16 getSP setSP
 -- anything else is invalid
 op x    = throwError $ "Invalid opcode: " ++ show x
 
+add16To8 :: Word16 -> Word8 -> Word16
+add16To8 a b = a + fromIntegral b
+
+-- as above, but interpret the 8 bit offset as signed
+add16to8Signed :: Word16 -> Word8 -> Word16
+add16to8Signed a b = fromIntegral (fromIntegral a + (fromIntegral b :: Int16))
+
 -- * ops dispatched to
 
 -- ** misc/unfinished ops
@@ -338,12 +347,20 @@ regOp16
   -> m ()
 regOp16 g m s = m <$> g >>= s
 
+-- TODO: these should set flags?????????
 inc16
-  :: (MonadReadReg16 m, MonadWriteReg16 m, MonadClock m)
+  :: (MonadReadReg16 m, MonadWriteReg16 m)
   => m Word16
   -> (Word16 -> m ())
   -> m ()
-inc16 g = takes 2 . regOp16 g (+ 1)
+inc16 g = regOp16 g (+ 1)
+
+dec16
+  :: (MonadReadReg16 m, MonadWriteReg16 m)
+  => m Word16
+  -> (Word16 -> m ())
+  -> m ()
+dec16 g = regOp16 g ((-) 1)
 
 -- ** 8 bit arithmetic/bitwise ops
 
