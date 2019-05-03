@@ -265,9 +265,23 @@ op 0xBB = takes 1 $ sub8 getA getE (\_ -> return ())
 op 0xBC = takes 1 $ sub8 getA getH (\_ -> return ())
 op 0xBD = takes 1 $ sub8 getA getL (\_ -> return ())
 op 0xBE = takes 2 $ sub8 getA (getHL >>= read8) (\_ -> return ())
--- op 0xFE does this with #, takes 2 INC, increment registers, might set the
--- half-carry flag but apparently not the carry flag
+-- op 0xFE does this with #, takes 2
+-- INC, increment registers, might set the half-carry flag but apparently not
+-- the carry flag
 op 0x3C = takes 1 $ inc8 getA setA
+op 0x04 = takes 1 $ inc8 getB setB
+op 0x0C = takes 1 $ inc8 getC setC
+op 0x14 = takes 1 $ inc8 getD setD
+op 0x1C = takes 1 $ inc8 getE setE
+op 0x24 = takes 1 $ inc8 getH setH
+op 0x2C = takes 1 $ inc8 getL setL
+op 0x34 = takes 3 $ inc8
+  (getHL >>= read8)
+  (\v -> do
+    hl <- getHL
+    write8 hl v
+  )
+
 
 -- rotates etc directly on A
 op 0x07 = rotateLeft getA setA
@@ -467,6 +481,17 @@ inc8 a s = do
   setFlag Zero      (r == 0)
   setFlag AddSub    False
   setFlag HalfCarry (testBit a' 3 && not (testBit r 3))
+  s r
+
+-- |decrement a register. Doesn't touch carry but will set zero or half carry
+-- appropriately and set add/sub
+dec8 :: (MonadFlags m) => m Word8 -> (Word8 -> m ()) -> m ()
+dec8 a s = do
+  a' <- a
+  let r = a' - 1
+  setFlag Zero      (r == 0)
+  setFlag AddSub    True
+  setFlag HalfCarry (testBit r 3 && not (testBit a' 3))
   s r
 
 -- | gets the value at (PC) and increments PC, for fetching immediate values etc.

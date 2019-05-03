@@ -185,7 +185,7 @@ cpuUnits = do
       (rD . runReg8Default $ sub8 getC getD setD) `shouldBe` 0x21 -- overflows
       (rH . runReg8Default $ sub8 getH getL setH) `shouldBe` 0x44
       (rL . runReg8Default $ sub8 getL getA setL) `shouldBe` 0xCC
-    it "sets correct flags" $ do -- recall flags are stored hncz
+    it "sets correct flags" $ do
       (flags . runReg8Carry $ sub8 getA getA setA) `shouldBe` 0b1111
       (flags . runReg8Carry $ sub8 getD getA setD) `shouldBe` 0b1110
 
@@ -231,16 +231,6 @@ cpuUnits = do
       (flags . runReg8Default $ xor8 getA getA setA) `shouldBe` 0b0001
       (flags . runReg8Default $ xor8 getA getB setB) `shouldBe` 0b0000
 
-      {- { rA    = 0x01
-                   , rF    = 0x08
-                   , rB    = 0x0F
-                   , rC    = 0x11
-                   , rD    = 0xF0
-                   , rE    = 0xFF
-                   , rH    = 0x11
-                   , rL    = 0xCD
-                   , flags = 0
-                   }-}
   describe "inc8" $ do
     it "computes correct values" $ do
       (rA . runReg8Default $ inc8 getA setA) `shouldBe` 0x02
@@ -261,3 +251,30 @@ cpuUnits = do
       (flags . runReg8Carry $ inc8 getA setA) `shouldBe` 0b0010
       (flags . runReg8Carry $ inc8 getE setE) `shouldBe` 0b1011
       (flags . runReg8Carry $ inc8 getB setB) `shouldBe` 0b1010
+
+            {- { rA    = 0x01
+                         , rF    = 0x08
+                         , rB    = 0x0F
+                         , rC    = 0x11
+                         , rD    = 0xF0
+                         , rE    = 0xFF
+                         , rH    = 0x11
+                         , rL    = 0xCD
+                         , flags = 0
+                         }-}
+  describe "dec8" $ do
+    it "computes correct values" $ do
+      (rA . runReg8Default $ dec8 getA setA) `shouldBe` 0x00
+      (rB . runReg8Default $ dec8 getB setB) `shouldBe` 0x0E
+      (rC . runReg8Default $ dec8 getC setC) `shouldBe` 0x10
+      (rD . runReg8Default $ dec8 getD setD) `shouldBe` 0xEF
+      (rE . runReg8Default $ dec8 getE setE) `shouldBe` 0xFE
+      (rH . runReg8Default $ dec8 getH setH) `shouldBe` 0x10
+      (rL . runReg8Default $ dec8 getL setL) `shouldBe` 0xCC
+      (rA . runReg8Default $ dec8 getL setL) `shouldBe` 0x01
+    it "sets correct flags" $ do -- recall flags are stored hncz
+      (flags . runReg8Default $ dec8 getA setA) `shouldBe` 0b0101
+      (flags . runReg8Default $ dec8 getD setD) `shouldBe` 0b1100
+      -- carry flag should be left alone
+      (flags . runReg8Carry $ dec8 getA setA) `shouldBe` 0b0111
+      (flags . runReg8Carry $ dec8 getD setD) `shouldBe` 0b1110
