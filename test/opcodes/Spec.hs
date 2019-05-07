@@ -86,6 +86,11 @@ defaultState = CPUState 0 0x100 0xFF00 0 0 0 0 0 0 0 0 defaultMem True
 defaultMem :: V.Vector Word8
 defaultMem = V.enumFromN 0 65536
 
+defaultNext :: Word8 -> CPUState
+defaultNext oc = defaultState
+  { mem = mem defaultState V.// [(fromIntegral . rPC $ defaultState, oc)]
+  }
+
 newtype MonadCPUT m a = MonadCPUT  {unCPUT :: StateT CPUState (ExceptT String m) a}
                     deriving (Functor, Applicative, Monad, MonadState CPUState, MonadError String)
 
@@ -191,19 +196,25 @@ instance (Monad m) => MonadPC (MonadCPUT m) where
 runOp :: Word8 -> Either String CPUState
 runOp oc = runIdentity (runExceptT (execStateT (unCPUT (op oc)) defaultState))
 
+runCBOp :: Word8 -> Either String CPUState
+runCBOp oc =
+  runIdentity (runExceptT (execStateT (unCPUT (op 0xCB)) (defaultNext oc)))
+
 buildCase :: Opcode -> Spec
 buildCase o = it title test
  where
   title = showHex
     (code o)
-    (" (" ++ (mnemonic o) ++ ") takes " ++ (show . cycles $ o) ++ " cycles")
+    (" (" ++ mnemonic o ++ ") takes " ++ (show . cycles $ o) ++ " cycles")
   test = clock <$> runOp (code o) `shouldBe` Right (cycles o)
 
 buildCBCase :: Opcode -> Spec
-buildCBCase o = xit title test
+buildCBCase o = it title test
  where
-  title = showHex (code o) (" takes " ++ (show . cycles $ o) ++ " cycles")
-  test  = clock <$> runOp (code o) `shouldBe` Right (cycles o)
+  title = showHex
+    (code o)
+    (" (" ++ mnemonic o ++ ") takes " ++ (show . cycles $ o) ++ " cycles")
+  test = clock <$> runCBOp (code o) `shouldBe` Right (cycles o)
 
 genNormal :: M.Map String Opcode -> Spec
 genNormal ocs = traverse buildCase ocs $> ()

@@ -14,15 +14,15 @@ module Hboi.CPU.OpCodes where
 import           Hboi.CPU.State
 import           Hboi.Memory                              ( MonadMem(..) )
 
+import           Control.Monad
 import           Control.Monad.Except
 import           Data.Bits
 import           Data.Word                                ( Word8
                                                           , Word16
                                                           )
 import           Data.Int                                 ( Int16 )
+import           Numeric                                  ( showHex )
 
-
-import           Debug.Trace
 
 -- * the main dispatch functions
 
@@ -48,7 +48,7 @@ op
 -- NO OP
 op 0x00 = incClock 1
 -- Prefix to CB instructions
-op 0xCB = throwError "CB instructions not implemented"
+op 0xCB = next >>= cbop
 -- Prefix to STOP
 op 0x10 = throwError "STOP not implemented"
 -- Disable/enable interrupts
@@ -281,26 +281,121 @@ op 0x34 = takes 3 $ inc8
     hl <- getHL
     write8 hl v
   )
-
-
--- rotates etc directly on A
-op 0x07 = rotateLeft getA setA
-op 0x17 = rotateCarryLeft getA setA
-op 0x0F = rotateRight getA setA
-op 0x1F = rotateCarryRight getA setA
-
+-- DEC, decrement a register. Sets half carry, zero etc. Not carry
+op 0x3D = takes 1 $ dec8 getA setA
+op 0x05 = takes 1 $ dec8 getB setB
+op 0x0D = takes 1 $ dec8 getC setC
+op 0x15 = takes 1 $ dec8 getD setD
+op 0x1D = takes 1 $ dec8 getE setE
+op 0x25 = takes 1 $ dec8 getH setH
+op 0x2D = takes 1 $ dec8 getL setL
+op 0x35 = takes 3 $ dec8
+  (getHL >>= read8)
+  (\v -> do
+    hl <- getHL
+    write8 hl v
+  )
+-- ADD for 16s, sets flags as expected but for more spaced out bits
+op 0x09 = takes 2 $ add16 getHL getBC setBC
+op 0x19 = takes 2 $ add16 getHL getDE setDE
+op 0x29 = takes 2 $ add16 getHL getHL setHL
+op 0x39 = takes 2 $ add16 getHL getSP setSP
+-- ADD an 8 bit immediate to SP
+op 0xE8 = takes 4 $ add16 getSP (fromIntegral <$> next) setSP
 -- 16 bit increments
-op 0x03 = inc16 getBC setBC
-op 0x13 = inc16 getDE setDE
-op 0x23 = inc16 getHL setHL
-op 0x33 = inc16 getSP setSP
-
--- op 0x04 = incB
--- op 0x05 = decB
-
-
+op 0x03 = takes 2 $ inc16 getBC setBC
+op 0x13 = takes 2 $ inc16 getDE setDE
+op 0x23 = takes 2 $ inc16 getHL setHL
+op 0x33 = takes 2 $ inc16 getSP setSP
+-- 16 bit decrements
+op 0x0B = takes 2 $ dec16 getBC setBC
+op 0x1B = takes 2 $ dec16 getDE setDE
+op 0x2B = takes 2 $ dec16 getHL setHL
+op 0x3B = takes 2 $ dec16 getSP setSP
+-- complement the A register, sets N and H
+op 0x2F =
+  takes 1
+    $   setFlag AddSub    True
+    >>  setFlag HalfCarry True
+    >>  complement
+    <$> getA
+    >>= setA
+-- rotates just on A
+op 0x07 = takes 1 $ rlc getA setA
+op 0x17 = takes 1 $ rl getA setA
+op 0x0F = takes 1 $ rrc getA setA
+op 0x1F = takes 1 $ rr getA setA
 -- anything else is invalid
-op x    = throwError $ "Invalid opcode: " ++ show x
+op x    = throwError $ "Invalid opcode: " ++ showHex x ""
+
+-- |CB-prefixed ops
+cbop
+  :: ( MonadPC m
+     , MonadSP m
+     , MonadReadReg8 m
+     , MonadWriteReg8 m
+     , MonadReadReg16 m
+     , MonadWriteReg16 m
+     , MonadClock m
+     , MonadError String m
+     , MonadFlags m
+     , MonadMem m
+     )
+  => Word8
+  -> m ()
+-- SWAP upper and lower nibble
+cbop 0x37 = takes 2 $ swap getA setA
+cbop 0x30 = takes 2 $ swap getB setB
+cbop 0x31 = takes 2 $ swap getC setC
+cbop 0x32 = takes 2 $ swap getD setD
+cbop 0x33 = takes 2 $ swap getE setE
+cbop 0x34 = takes 2 $ swap getH setH
+cbop 0x35 = takes 2 $ swap getH setH
+cbop 0x36 = takes 4 $ swap
+  (getHL >>= read8)
+  (\v -> do
+    hl <- getHL
+    write8 hl v
+  )
+-- rotates
+-- RLC, rotate left with carry
+cbop 0x07 = takes 2 $ rlc getA setA
+cbop 0x00 = takes 2 $ rlc getB setB
+cbop 0x01 = takes 2 $ rlc getC setC
+cbop 0x02 = takes 2 $ rlc getD setD
+cbop 0x03 = takes 2 $ rlc getE setE
+cbop 0x04 = takes 2 $ rlc getH setH
+cbop 0x05 = takes 2 $ rlc getL setL
+cbop 0x06 = takes 4 $ rlc (getHL >>= read8) (\v -> getHL >>= flip write8 v)
+-- RL, rotate left without carry (still sets it if necessary)
+cbop 0x10 = takes 2 $ rl getB setB
+cbop 0x11 = takes 2 $ rl getC setC
+cbop 0x12 = takes 2 $ rl getD setD
+cbop 0x13 = takes 2 $ rl getE setE
+cbop 0x14 = takes 2 $ rl getH setH
+cbop 0x15 = takes 2 $ rl getL setL
+cbop 0x16 = takes 4 $ rl (getHL >>= read8) (\v -> getHL >>= flip write8 v)
+cbop 0x17 = takes 2 $ rl getA setA
+-- RRC, rotate right with carry
+cbop 0x08 = takes 2 $ rrc getB setB
+cbop 0x09 = takes 2 $ rrc getC setC
+cbop 0x0A = takes 2 $ rrc getD setD
+cbop 0x0B = takes 2 $ rrc getE setE
+cbop 0x0C = takes 2 $ rrc getH setH
+cbop 0x0D = takes 2 $ rrc getL setL
+cbop 0x0E = takes 4 $ rrc (getHL >>= read8) (\v -> getHL >>= flip write8 v)
+cbop 0x0F = takes 2 $ rrc getA setA
+-- RR, rotate right without carry
+cbop 0x18 = takes 2 $ rr getB setB
+cbop 0x19 = takes 2 $ rr getC setC
+cbop 0x1A = takes 2 $ rr getD setD
+cbop 0x1B = takes 2 $ rr getE setE
+cbop 0x1C = takes 2 $ rr getH setH
+cbop 0x1D = takes 2 $ rr getL setL
+cbop 0x1E = takes 4 $ rr (getHL >>= read8) (\v -> getHL >>= flip write8 v)
+cbop 0x1F = takes 2 $ rr getA setA
+
+cbop x    = throwError $ "Invalid opcode: cb " ++ showHex x ""
 
 add16To8 :: Word16 -> Word8 -> Word16
 add16To8 a b = a + fromIntegral b
@@ -312,70 +407,51 @@ add16to8Signed a b = fromIntegral (fromIntegral a + (fromIntegral b :: Int16))
 -- * ops dispatched to
 
 -- ** misc/unfinished ops
-rotateCarryLeft
-  :: (MonadReadReg8 m, MonadWriteReg8 m, MonadFlags m, MonadClock m)
-  => m Word8
-  -> (Word8 -> m ())
-  -> m ()
-rotateCarryLeft g s = takes 1 $ do
+rlc :: (MonadFlags m) => m Word8 -> (Word8 -> m ()) -> m ()
+rlc g s = do
   c <- getFlag Carry
   w <- g
   let c'  = testBit w 7
       w'  = shiftL w 1
       w'' = if c then setBit w' 0 else clearBit w' 0
   setFlag Carry c'
+  setFlag Zero  (w'' == 0)
   s w''
 
-rotateCarryRight
-  :: (MonadReadReg8 m, MonadWriteReg8 m, MonadFlags m, MonadClock m)
-  => m Word8
-  -> (Word8 -> m ())
-  -> m ()
-rotateCarryRight g s = takes 1 $ do
+rrc :: (MonadFlags m) => m Word8 -> (Word8 -> m ()) -> m ()
+rrc g s = do
   c <- getFlag Carry
   w <- g
   let c'  = testBit w 0
       w'  = shiftR w 1
       w'' = if c then setBit w' 7 else clearBit w' 7
   setFlag Carry c'
+  setFlag Zero  (w'' == 0)
   s w''
 
-rotateLeft
-  :: (MonadReadReg8 m, MonadWriteReg8 m, MonadClock m)
-  => m Word8
-  -> (Word8 -> m ())
-  -> m ()
-rotateLeft g s = takes 1 $ fmap (`rotate` 1) g >>= s
+-- TODO flags
+rl :: (MonadFlags m) => m Word8 -> (Word8 -> m ()) -> m ()
+rl g s = do
+  w <- g
+  setFlag Carry (testBit w 7)
+  let w' = rotate w 1
+  setFlag Zero      (w' == 0)
+  setFlag AddSub    False
+  setFlag HalfCarry False
+  s w'
 
-rotateRight
-  :: (MonadReadReg8 m, MonadWriteReg8 m, MonadClock m)
-  => m Word8
-  -> (Word8 -> m ())
-  -> m ()
-rotateRight g s = takes 1 $ fmap (`rotate` (-1)) g >>= s
+rr :: (MonadFlags m) => m Word8 -> (Word8 -> m ()) -> m ()
+rr g s = do
+  w <- g
+  setFlag Carry (testBit w 0)
+  let w' = rotate w (-1)
+  setFlag Zero      (w' == 0)
+  setFlag AddSub    False
+  setFlag HalfCarry False
+  s w'
 
-regOp16
-  :: (MonadReadReg16 m, MonadWriteReg16 m)
-  => m Word16
-  -> (Word16 -> Word16)
-  -> (Word16 -> m ())
-  -> m ()
-regOp16 g m s = m <$> g >>= s
-
--- TODO: these should set flags?????????
-inc16
-  :: (MonadReadReg16 m, MonadWriteReg16 m)
-  => m Word16
-  -> (Word16 -> m ())
-  -> m ()
-inc16 g = regOp16 g (+ 1)
-
-dec16
-  :: (MonadReadReg16 m, MonadWriteReg16 m)
-  => m Word16
-  -> (Word16 -> m ())
-  -> m ()
-dec16 g = regOp16 g ((-) 1)
+inc16 :: (MonadFlags m) => m Word16 -> (Word16 -> m ()) -> m ()
+inc16 g = add16 g (pure 1)
 
 -- ** 8 bit arithmetic/bitwise ops
 
@@ -493,6 +569,37 @@ dec8 a s = do
   setFlag AddSub    True
   setFlag HalfCarry (testBit r 3 && not (testBit a' 3))
   s r
+
+-- |swap upper and lower nibbles, sets zero if appropriate clears the rest.
+swap :: (MonadFlags m) => m Word8 -> (Word8 -> m ()) -> m ()
+swap a s = a >>= sw >>= s
+ where
+  sw x = do
+    x' <- a
+    setFlag Zero      (x' == 0)
+    setFlag HalfCarry False
+    setFlag Carry     False
+    setFlag AddSub    False
+    return $ unsafeShiftL x' 4 .|. unsafeShiftR x' 4
+
+-- ** 16 bit arithmetic
+
+-- |add two sixteen bit ints. Sets half carry if bit 11 rolls over, carry for
+-- bit 15
+add16 :: (MonadFlags m) => m Word16 -> m Word16 -> (Word16 -> m ()) -> m ()
+add16 a b s = do
+  a' <- a
+  b' <- b
+  let r = a' + b'
+  setFlag Carry     (testBit (a' .|. b') 15 && not (testBit r 15))
+  setFlag HalfCarry (testBit (a' .|. b') 11 && not (testBit r 11))
+  clearFlag AddSub
+  setFlag Zero (r == 0)
+  s r
+
+-- |decrement 16 bits, leaving all flags untouched.
+dec16 :: (MonadFlags m) => m Word16 -> (Word16 -> m ()) -> m ()
+dec16 g s = (-) 1 <$> g >>= s
 
 -- | gets the value at (PC) and increments PC, for fetching immediate values etc.
 -- TODO maybe move this into MonadPC itself
