@@ -20,7 +20,9 @@ import           Data.Bits
 import           Data.Word                                ( Word8
                                                           , Word16
                                                           )
-import           Data.Int                                 ( Int16 )
+import           Data.Int                                 ( Int16
+                                                          , Int8
+                                                          )
 import           Numeric                                  ( showHex )
 
 
@@ -55,11 +57,21 @@ op 0x10 = throwError "STOP not implemented"
 op 0xF3 = takes 1 $ setFlag IME False -- di
 op 0xFB = takes 1 $ setFlag IME True -- ei
 -------------JUMPS-----------------
--- op 0xC3 unconditional absolute jump to immediate value
+op 0xC3 = takes 3 $ next16 >>= setPC -- unconditional absolute jump to immediate value
 op 0xE9 = takes 1 $ getHL >>= setPC  -- jump to contents of HL
--- op ?? some kind of conditional jumpery
--- op 0x18 some kind of relative jump
--- op ?? relative conditional jump
+-- some kind of conditional absolute jumpery, takes an extra cycle
+-- if it does jump maybe?
+-- TODO: double check this, adjust the auto test somehow so they
+-- can pass
+op 0xC2 = takes 3 . join $ cjump <$> next16 <*> (not <$> getFlag Zero)
+op 0xCA = takes 3 . join $ cjump <$> next16 <*> getFlag Zero
+op 0xD2 = takes 3 . join $ cjump <$> next16 <*> (not <$> getFlag Carry)
+op 0xDA = takes 3 . join $ cjump <$> next16 <*> getFlag Carry
+-- relative, add 8 bit signed to PC
+op 0x18 = takes 2 $ (add16to8Signed <$> getPC <*> next) >>= setPC
+-- relative conditional
+-- op 0x20
+
 -- op 0xCD call: push PC on the stack, set PC to immediate 16
 -- op ?? conditional call
 -- op 0xC9 ret: pop PC from stack
@@ -394,6 +406,70 @@ cbop 0x1C = takes 2 $ rr getH setH
 cbop 0x1D = takes 2 $ rr getL setL
 cbop 0x1E = takes 4 $ rr (getHL >>= read8) (\v -> getHL >>= flip write8 v)
 cbop 0x1F = takes 2 $ rr getA setA
+-- SLA, left shift
+cbop 0x20 = takes 2 $ sla getB setB
+cbop 0x21 = takes 2 $ sla getC setC
+cbop 0x22 = takes 2 $ sla getD setD
+cbop 0x23 = takes 2 $ sla getE setE
+cbop 0x24 = takes 2 $ sla getH setH
+cbop 0x25 = takes 2 $ sla getL setL
+cbop 0x26 = takes 4 $ sla (getHL >>= read8) (\v -> getHL >>= flip write8 v)
+cbop 0x27 = takes 2 $ sla getA setA
+-- SRA, right shift (arithmetic)
+cbop 0x28 = takes 2 $ sra getB setB
+cbop 0x29 = takes 2 $ sra getC setC
+cbop 0x2A = takes 2 $ sra getD setD
+cbop 0x2B = takes 2 $ sra getE setE
+cbop 0x2C = takes 2 $ sra getH setH
+cbop 0x2D = takes 2 $ sra getL setL
+cbop 0x2E = takes 4 $ sra (getHL >>= read8) (\v -> getHL >>= flip write8 v)
+cbop 0x2F = takes 2 $ sra getA setA
+-- SRL, right shift (logical)
+cbop 0x38 = takes 2 $ srl getB setB
+cbop 0x39 = takes 2 $ srl getC setC
+cbop 0x3A = takes 2 $ srl getD setD
+cbop 0x3B = takes 2 $ srl getE setE
+cbop 0x3C = takes 2 $ srl getH setH
+cbop 0x3D = takes 2 $ srl getL setL
+cbop 0x3E = takes 4 $ srl (getHL >>= read8) (\v -> getHL >>= flip write8 v)
+cbop 0x3F = takes 2 $ srl getA setA
+-- BIT, test a bit. Presumably an 8 bit immediate???
+cbop 0x40 = takes 2 $ bitTest <$> next <*> getB >>= setFlag Carry
+cbop 0x41 = takes 2 $ bitTest <$> next <*> getC >>= setFlag Carry
+cbop 0x42 = takes 2 $ bitTest <$> next <*> getD >>= setFlag Carry
+cbop 0x43 = takes 2 $ bitTest <$> next <*> getE >>= setFlag Carry
+cbop 0x44 = takes 2 $ bitTest <$> next <*> getH >>= setFlag Carry
+cbop 0x45 = takes 2 $ bitTest <$> next <*> getL >>= setFlag Carry
+cbop 0x46 = takes 4 $ bitTest <$> next <*> (getHL >>= read8) >>= setFlag Carry
+cbop 0x47 = takes 2 $ bitTest <$> next <*> getA >>= setFlag Carry
+-- SET, set a bit
+cbop 0xC0 = takes 2 $ bitSet <$> next <*> getB >>= setB
+cbop 0xC1 = takes 2 $ bitSet <$> next <*> getC >>= setC
+cbop 0xC2 = takes 2 $ bitSet <$> next <*> getD >>= setD
+cbop 0xC3 = takes 2 $ bitSet <$> next <*> getE >>= setE
+cbop 0xC4 = takes 2 $ bitSet <$> next <*> getH >>= setH
+cbop 0xC5 = takes 2 $ bitSet <$> next <*> getL >>= setL
+cbop 0xC6 =
+  takes 4
+    $   bitSet
+    <$> next
+    <*> (getHL >>= read8)
+    >>= (\v -> getHL >>= flip write8 v)
+cbop 0xC7 = takes 2 $ bitSet <$> next <*> getA >>= setA
+-- RES, reset bit aka clear
+cbop 0x80 = takes 2 $ bitClear <$> next <*> getB >>= setB
+cbop 0x81 = takes 2 $ bitClear <$> next <*> getC >>= setC
+cbop 0x82 = takes 2 $ bitClear <$> next <*> getD >>= setD
+cbop 0x83 = takes 2 $ bitClear <$> next <*> getE >>= setE
+cbop 0x84 = takes 2 $ bitClear <$> next <*> getH >>= setH
+cbop 0x85 = takes 2 $ bitClear <$> next <*> getL >>= setL
+cbop 0x86 =
+  takes 4
+    $   bitClear
+    <$> next
+    <*> (getHL >>= read8)
+    >>= (\v -> getHL >>= flip write8 v)
+cbop 0x87 = takes 2 $ bitClear <$> next <*> getA >>= setA
 
 cbop x    = throwError $ "Invalid opcode: cb " ++ showHex x ""
 
@@ -406,7 +482,21 @@ add16to8Signed a b = fromIntegral (fromIntegral a + (fromIntegral b :: Int16))
 
 -- * ops dispatched to
 
--- ** misc/unfinished ops
+-- ** conditional jump helpers
+-- | absolute jump based on some condition
+cjump :: (MonadPC m, MonadClock m) => Word16 -> Bool -> m ()
+cjump a c = when c $ takes 1 . setPC $ a
+
+-- ** uncategorised due to laziness
+bitClear :: Word8 -> Word8 -> Word8
+bitClear b r = r `clearBit` (fromIntegral b)
+
+bitTest :: Word8 -> Word8 -> Bool
+bitTest b r = not $ testBit r (fromIntegral b)
+
+bitSet :: Word8 -> Word8 -> Word8
+bitSet b r = r `setBit` (fromIntegral b)
+
 rlc :: (MonadFlags m) => m Word8 -> (Word8 -> m ()) -> m ()
 rlc g s = do
   c <- getFlag Carry
@@ -429,26 +519,42 @@ rrc g s = do
   setFlag Zero  (w'' == 0)
   s w''
 
--- TODO flags
 rl :: (MonadFlags m) => m Word8 -> (Word8 -> m ()) -> m ()
-rl g s = do
-  w <- g
-  setFlag Carry (testBit w 7)
-  let w' = rotate w 1
-  setFlag Zero      (w' == 0)
-  setFlag AddSub    False
-  setFlag HalfCarry False
-  s w'
+rl g s = bitShift g (`rotate` 1) 7 >>= s
 
 rr :: (MonadFlags m) => m Word8 -> (Word8 -> m ()) -> m ()
-rr g s = do
+rr g s = bitShift g (`rotate` (-1)) 0 >>= s
+
+-- unsafe shifts are OK here, because we know the size we're dealing with and
+-- the shift amount is fixed
+sla :: (MonadFlags m) => m Word8 -> (Word8 -> m ()) -> m ()
+sla g s = bitShift g (`unsafeShiftL` 1) 7 >>= s
+
+-- bit 7 needs to stay the same
+sra :: (MonadFlags m) => m Word8 -> (Word8 -> m ()) -> m ()
+sra g s = bitShift g aShiftR 0 >>= s
+
+-- logical, bit 7 set to 0
+srl :: (MonadFlags m) => m Word8 -> (Word8 -> m ()) -> m ()
+srl g s = bitShift g (`unsafeShiftR` 1) 0 >>= s
+
+-- words only do logical shifts, we need an arithmetic shift
+aShiftR :: Word8 -> Word8
+aShiftR x = fromIntegral . (`unsafeShiftR` 1) $ y
+ where
+  y :: Int8
+  y = fromIntegral x
+
+-- reduce some duplication
+bitShift :: (MonadFlags m) => m Word8 -> (Word8 -> Word8) -> Int -> m Word8
+bitShift g o b = do
   w <- g
-  setFlag Carry (testBit w 0)
-  let w' = rotate w (-1)
+  setFlag Carry (testBit w b)
+  let w' = o w
   setFlag Zero      (w' == 0)
   setFlag AddSub    False
   setFlag HalfCarry False
-  s w'
+  return w'
 
 inc16 :: (MonadFlags m) => m Word16 -> (Word16 -> m ()) -> m ()
 inc16 g = add16 g (pure 1)
