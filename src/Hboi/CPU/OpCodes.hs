@@ -70,13 +70,38 @@ op 0xDA = takes 3 . join $ cjump <$> next16 <*> getFlag Carry
 -- relative, add 8 bit signed to PC
 op 0x18 = takes 2 $ (add16to8Signed <$> getPC <*> next) >>= setPC
 -- relative conditional
--- op 0x20
-
--- op 0xCD call: push PC on the stack, set PC to immediate 16
--- op ?? conditional call
--- op 0xC9 ret: pop PC from stack
+op 0x20 =
+  takes 2
+    .   join
+    $   cjump
+    <$> (add16To8 <$> getPC <*> next)
+    <*> (not <$> getFlag Zero)
+op 0x28 =
+  takes 2 . join $ cjump <$> (add16To8 <$> getPC <*> next) <*> getFlag Zero
+op 0x30 =
+  takes 2
+    .   join
+    $   cjump
+    <$> (add16To8 <$> getPC <*> next)
+    <*> (not <$> getFlag Carry)
+op 0x38 =
+  takes 2 . join $ cjump <$> (add16To8 <$> getPC <*> next) <*> getFlag Zero
+op 0xCD = takes 3 $ getPC >>= spush >> next16 >>= setPC -- call: push PC on the stack, set PC to immediate 16
+-- conditional calls
+-- TODO: these need a unit test
+op 0xC4 = takes 3 $ (getPC >>= spush) >> join
+  (cjump <$> (add16To8 <$> getPC <*> next) <*> (not <$> getFlag Zero))
+op 0xCC = takes 3 $ (getPC >>= spush) >> join
+  (cjump <$> (add16To8 <$> getPC <*> next) <*> getFlag Zero)
+op 0xD4 = takes 3 $ (getPC >>= spush) >> join
+  (cjump <$> (add16To8 <$> getPC <*> next) <*> (not <$> getFlag Carry))
+op 0xDC = takes 3 $ (getPC >>= spush) >> join
+  (cjump <$> (add16To8 <$> getPC <*> next) <*> getFlag Carry)
+-- restarts, push current address onto stack and jump to a location from mem?
+-- not quite sure how these work
+-- returns, pop an address from stack and jump there
+op 0xC9 = takes 2 $ spop >>= setPC
 -- op 0xD9 reti: ret and ei
--- rst?
 ------------LOADS------------------
 -- special loads for A
 -- op 0x3e -- takes 2, load # into A (what is #??????)
