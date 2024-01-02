@@ -1,6 +1,7 @@
 {-| This is the interface to memory. Generally it appears that valid memory
 addresses are between 0x0000 and 0xFFFF inclusive $FFFF is the interrupt
-register. We need to be able to read and write one byte at a time, and we need
+register and 0xFF00 to 0xFF7F are memory mapped to peripherals, such as the LCD.
+We need to be able to read and write one byte at a time, and we need
 16 bit addresses.
 
 This module has the interface, concrete implementations are tbd.
